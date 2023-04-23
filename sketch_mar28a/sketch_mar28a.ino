@@ -15,7 +15,7 @@ unsigned long recordedMillis, currentMillis;
 unsigned int msCounter = 0;//计时用变量，决定控制频率
 
 //pwm输出用
-uint16_t freq = 60;
+uint16_t freq = 2000;
 
 //中断与编码器
 uint8_t outFlag = 0;
@@ -36,7 +36,7 @@ void setup() {
   pinMode(RGB_BUILTIN, OUTPUT);
   pinMode(CW_pin, OUTPUT);
   pinMode(CCW_pin, OUTPUT);
-  // Wire.begin();
+
   u8g2.begin();//OLED setup
 
   recordedMillis = currentMillis = millis();//Init timers
@@ -50,7 +50,6 @@ void setup() {
 }
 
 void InterruptA(){
-  // outFlag = 1;
   phaseA = digitalRead(phaseA_pin);
   phaseB = digitalRead(phaseB_pin);
   if(phaseA && phaseB)EncoderTotal++;
@@ -60,7 +59,6 @@ void InterruptA(){
   // Serial.printf("%d, %d \n", phaseA, phaseB);
 }
 void InterruptB(){
-  // outFlag = 1;
   phaseA = digitalRead(phaseA_pin);
   phaseB = digitalRead(phaseB_pin);
   if(phaseB && phaseA)EncoderTotal--;
@@ -83,14 +81,13 @@ void SetCounterClockwise(){
 // the loop function runs over and over again forever
 void loop() {
   currentMillis = millis();
-  // if(outFlag = 1){
-  //   outFlag = 0;
-  //   Serial.printf("%d, %d \n", phaseA, phaseB);
-  // }
+
   if(currentMillis - recordedMillis >= 1){
     msCounter += currentMillis - recordedMillis;
     recordedMillis = currentMillis;
     //execute every millisecond
+
+
 
     if(u8g2.nextPage()){
       u8g2.drawBox(64-20, 32-10, 40, 20);
@@ -103,18 +100,14 @@ void loop() {
     msCounter = msCounter - 1000;
     ///don't change above
     // Serial.printf("%d \n",currentMillis);//print time
-    SetClockwise();
+    if(currentMillis < 4000)SetClockwise();
+    else SetCounterClockwise();
     ledcWrite(0,200);
-    // Serial.printf("%d \n",EncoderTotal);//print encoder
     currentAngle = EncoderTotal*360.0f/810.0f/44.0f;
     Serial.printf("%f \n",currentAngle);
     // if(freq<32000)freq = freq+1000;
     // Serial.printf("%d \n",freq);
     // ledcChangeFrequency(0,freq,8);
-    // u8g2.firstPage();
-    // do {
-    //   u8g2.drawBox(64, 32, 20, 10);
-    // } while ( u8g2.nextPage() );
 
   /*
     char m_str[3];
@@ -130,30 +123,10 @@ void loop() {
     if ( m == 60 )m = 0;
     */
 
-
-    // Serial.printf("%d \n",currentMillis);
-    //execute every second
-    //Write message to the slave
-    
-    // Wire.beginTransmission(I2C_DEV_ADDR);
-    // Wire.printf("Hello World! %u", i++);
-    // uint8_t error = Wire.endTransmission(true);
-    // Serial.printf("endTransmission: %u\n", error);
-
     // u8g2.clearBuffer();					// clear the internal memory
     // u8g2.setFont(u8g2_font_ncenB08_tr);	// choose a suitable font
     // u8g2.drawStr(0,10,"Hello World!");	// write something to the internal memory
     // u8g2.sendBuffer();					// transfer internal memory to the display
 
   }
-  
-// #ifdef RGB_BUILTIN
-  // digitalWrite(RGB_BUILTIN, HIGH);   // Turn the RGB LED white
-  // // Serial.print("off\n");
-  // delay(1000);
-  // digitalWrite(RGB_BUILTIN, LOW);    // Turn the RGB LED off
-  // // Serial.print("on\n");
-  // delay(1000);
-
-
 }
