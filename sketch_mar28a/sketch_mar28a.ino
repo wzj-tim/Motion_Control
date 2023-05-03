@@ -19,14 +19,21 @@ typedef struct{
   float speed;
 } FreqRecord;
 
+typedef struct{
+  uint16_t duty;
+  float speed;
+} DutyRecord;
+
 FreqRecord freqRecord[400];
+DutyRecord dutyRecord[200];
+
 
 
 unsigned long recordedMillis, currentMillis;
 unsigned int msCounter = 0;//计时用变量，决定控制频率
 
 //pwm输出用
-uint16_t freq = 2000;
+uint16_t freq = 100;
 
 //中断与编码器
 uint8_t outFlag = 0;
@@ -64,8 +71,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(phaseA_pin), InterruptA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(phaseB_pin), InterruptB, CHANGE);
 
-  ledcChangeFrequency(PWM_Channel,5,PWM_Bits);
-  ledcWrite(PWM_Channel,800);
+  // ledcChangeFrequency(PWM_Channel,100,PWM_Bits);
+  ledcWrite(PWM_Channel,50);
 
 }
 
@@ -126,15 +133,49 @@ void FreqTest(){
     PrintMemory();
   }
 
+}
+
+void DutyTest(){
+  static uint16_t testDuty = 50;
+  static uint16_t testIndex = 0;
+  static uint16_t dutyTime = 3000;
+  static float testSpeed = 0;
+
+  if(dutyTime > 0){
+    dutyTime--;
+    // Serial.printf("%d\n",freqTime);
+    testSpeed = 0.95f*testSpeed + 0.05f*currentSpeed;
+  }
+  else{
+    dutyRecord[testIndex].duty = testDuty;
+    dutyRecord[testIndex].speed = testSpeed;
+    testIndex++;
+    testSpeed = 0;
+    testDuty += 5;
+    dutyTime=400;
+    // Serial.printf("%d\n",testDuty);
+    ledcWrite(PWM_Channel,testDuty);
+  }
+
+  if(testDuty > 1020){
+    dutyTime = 400;
+    PrintMemory();
+  }
 
 }
 
 void PrintMemory(){
   static uint16_t outIndex = 0;
-  if(outIndex<361){
-    Serial.printf("%d, %f \n",freqRecord[outIndex].frequency,freqRecord[outIndex].speed);
+  // if(outIndex<361){
+  //   Serial.printf("%d, %f \n",freqRecord[outIndex].frequency,freqRecord[outIndex].speed);
+  //   outIndex++;
+  // }
+
+  if(dutyRecord[outIndex].duty>0 && outIndex<199){
+    Serial.printf("%d, %f \n",dutyRecord[outIndex].duty,dutyRecord[outIndex].speed);
     outIndex++;
   }
+
 }
 
 // the loop function runs over and over again forever
@@ -146,10 +187,12 @@ void loop() {
     
     //execute every millisecond
     currentAngle = EncoderTotal/99.0f*PI/180;//*360.0f/810.0f/44.0f*PI/180;//rad
-    currentSpeed = (EncoderTotal-lastEncoder)/(currentMillis - recordedMillis)/99.0f*PI/180;//rad/s
+    currentSpeed = (float)(EncoderTotal-lastEncoder)/(float)(currentMillis - recordedMillis)/99.0f*PI/180.0f;//rad/s
+    // Serial.printf("%d,%d \n",EncoderTotal-lastEncoder,currentMillis - recordedMillis);
     lastEncoder = EncoderTotal;
-
-    FreqTest();
+    
+    // FreqTest();
+    DutyTest();
 
     // if(u8g2.nextPage()){
     //   u8g2.drawBox(64-20, 32-10, 40, 20);
@@ -163,7 +206,8 @@ void loop() {
     msCounter = msCounter - 1000;
     ///don't change above
     // Serial.printf("%d \n",currentMillis);//print time
-    SetClockwise();
+    SetCounterClockwise();
+    // SetClockwise();
     // ledcWrite(0,200);
     // Serial.printf("%f \n",currentAngle);
     // if(freq<32000)freq = freq+1000;
