@@ -47,8 +47,17 @@ float currentAngle = 0;
 float currentSpeed = 0;
 // bool isClockWise = false;
 
+uint8_t profileType  = 0;
+float recordAngle;
+float expSpeed, expAngle, expAcc;
+int16_t expDuty;
+float time_f;
+float record_time;
+uint8_t record_index;
+
 //OLED test
 uint8_t m = 24;
+uint8_t recV[128];
 
 //Test output memort
 uint8_t mem[200];
@@ -75,7 +84,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(phaseB_pin), InterruptB, CHANGE);
 
   // ledcChangeFrequency(PWM_Channel,100,PWM_Bits);
-  ledcWrite(PWM_Channel,500);
+  ledcWrite(PWM_Channel,0);
 
 }
 
@@ -182,6 +191,60 @@ void PrintMemory(){
 
 }
 
+float GetTrapSpeed(float t){
+    if(t<=2.0f) return 0.4*t;
+    else if(t<=3.927f)return 0.8f;
+    else if(t<=5.927f)return 0.8f-0.4*(t-3.927f);
+    else return 0;
+}
+
+float GetTrapAngle(float t){
+    if(t<=2.0f) return 0.2*t*t;
+    else if(t<=3.927f)return 0.8f+0.8f*(t-2);
+    else if(t<=5.927f)return -0.8f+0.8f*t-0.2f*(t-3.927f)*(t-3.927f);
+    else return 3.14159f;
+}
+
+float GetSSpeed(float t){
+    if(t<=2.0f) return 0.075f*t*t;
+    else if(t<=4.0f)return 0.6f-0.075f*(4-t)*(4-t);
+    else if(t<=5.23f)return 0.6f;
+    else if(t<=7.23f)return 0.6f-0.075f*(t-5.23f)*(t-5.23f);
+    else if(t<=9.23f)return 0.075f*(9.23f-t)*(9.23f-t);
+    else return 0;
+}
+
+float GetSAngle(float t){
+    if(t<=2.0f) return 0.025*powf(t,3);
+    else if(t<=4.0f)return 0.6f*(t-2)+0.025f*pow((4-t),3);
+    else if(t<=5.23f)return 1.2f+0.6f*(t-4);
+    else if(t<=7.23f)return 3.14f-0.6f*(7.23f-t)-0.025f*pow((t-5.23f),3);
+    else if(t<=9.23f)return 3.14f-0.025f*pow((9.23f-t),3);
+    else return 3.14159f;
+}
+
+uint16_t Acc2Duty(float acc, float vel){
+  // float vmax = ((((0.01364f*vel-0.0448f)*vel+0.0579f)*vel-0.0372f)*vel+0.0123f)*vel-0.00068f;
+  // int16_t duty = (int)(acc/(0.00773f*(vmax-vel)));
+  int16_t duty = (int)(sqrtf(acc/0.00773f));
+  if(duty<0)duty=0;
+  duty = duty+50;
+  if(duty>1023)duty=1023;
+  return duty;
+}
+
+int16_t StateFeedback(float targetSpeed, float targetAngle){
+  expAcc = 2400 * (targetSpeed - currentSpeed) + 7200 * (targetAngle-currentAngle);
+  // return Acc2Duty(expAcc, currentSpeed);
+  int16_t Duty = (int)expAcc;
+  if(abs(Duty)<10)Duty=0;
+  if(Duty>0)Duty += 60;
+  else if(Duty<0)Duty -= 60;
+  if(Duty>1023)Duty=1023;
+  if(Duty<-1023)Duty=-1023;
+  return Duty;
+}
+
 // the loop function runs over and over again forever
 void loop() {
   currentMillis = millis();
@@ -196,31 +259,93 @@ void loop() {
     // Serial.printf("%d,%d \n",EncoderTotal-lastEncoder,currentMillis - recordedMillis);
     lastEncoder = EncoderTotal;
     // Serial.printf("%f\n", currentAngle);
-    if(tenMsCounter >= 10){
-      currentSpeed = (float)(EncoderTotal-tenLastEncoder)/(float)(tenMsCounter)/99.0f*PI/180.0f;//rad/s
-      tenMsCounter = 0;
+    if(tenMsCounter >= 10){//100Hz
+      currentSpeed = (float)(EncoderTotal-tenLastEncoder)/(float)(tenMsCounter)/99.0f*PI/180.0f *1000.0f;//rad/s
+      tenMsCounter -= 10;
       tenLastEncoder = EncoderTotal;
-      Serial.printf("/*%f*/\n",currentSpeed);
+
+      if(currentMillis > 2000){
+        time_f = ((float)((currentMillis-2000)%30000)/1000.0f);
+        if(time_f <15){
+          if(profileType){
+            profileType = 0;
+            recordAngle = currentAngle;
+            record_time = 0;
+            record_index = 0;
+          }
+          expSpeed = GetTrapSpeed(time_f);
+          expAngle = GetTrapAngle(time_f)+recordAngle;
+          expDuty = StateFeedback(expSpeed,expAngle);
+          // Serial.printf("%d\n",expDuty);
+          if(time_f > 10 && record_index>0){
+            // u8g2.firstPage();
+            // do{
+            //   u8g2.drawPixel(record_index, recV[record_index--]);
+            // } while (u8g2.nextPage() && record_index--);
+            
+          } else{
+              if(time_f-record_time>0.1f){
+                record_time = time_f;
+                recV[record_index++] = (int)(currentSpeed/0.6f);
+              }
+          }
+        } else {
+          if(!profileType){
+            profileType = 1;
+            recordAngle = currentAngle;
+            record_time = 0;
+            record_index = 0;
+          }
+          expSpeed = GetSSpeed(time_f-15.0f);
+          expAngle = GetSAngle(time_f-15.0f)+recordAngle;
+          expDuty = StateFeedback(expSpeed,expAngle);
+          if(time_f > 25){
+            // u8g2.firstPage();
+            // do{
+            //   u8g2.drawPixel(record_index, recV[record_index--]);
+            // } while (u8g2.nextPage() && record_index--);
+          } else{
+              if(time_f-record_time>0.1f){
+                record_time = time_f;
+                recV[record_index++] = (int)(currentSpeed/0.6f);
+              }
+          }
+        }
+        
+        if(expDuty>=0){
+          SetClockwise();
+          ledcWrite(PWM_Channel,expDuty);
+        } else if(expDuty<0){
+          SetCounterClockwise();
+          ledcWrite(PWM_Channel,-expDuty);
+        }
+      }
+
+      Serial.printf("/*%f,%f,%f,%f,%f,%f,%f*/\n",currentSpeed,expSpeed,currentAngle,expAngle,expAcc,(float)expDuty,((float)currentMillis/1000.0f));
+
+    //   if(u8g2.nextPage()){
+    //   // u8g2.drawBox(64-20, 32-10, 40, 20);
+    //   u8g2.drawPixel(10, 10);
+    // } else{
+    //   u8g2.firstPage();
+    // }
+
     }
     
     // FreqTest();
     // DutyTest();
 
-    // if(u8g2.nextPage()){
-    //   u8g2.drawBox(64-20, 32-10, 40, 20);
-    // } else{
-    //   u8g2.firstPage();
-    // }
+    
 
     recordedMillis = currentMillis;
   }
-  if(msCounter>=2000){
-    msCounter = msCounter - 2000;
+  if(msCounter>=1000){
+    msCounter = msCounter - 1000;
     ///don't change above
     // Serial.printf("%d \n",currentMillis);//print time
-    // SetCounterClockwise();
-    if(currentSpeed <= 0)SetClockwise();
-    else SetCounterClockwise();
+    // SetClockwise();
+    // if(currentSpeed <= 0)SetClockwise();
+    // else SetCounterClockwise();
     // ledcWrite(0,200);
     // Serial.printf("%f \n",currentAngle);
     // if(freq<32000)freq = freq+1000;
