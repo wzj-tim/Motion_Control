@@ -54,10 +54,12 @@ int16_t expDuty;
 float time_f;
 float record_time;
 uint8_t record_index;
+uint8_t new_graph;
 
 //OLED test
 uint8_t m = 24;
 uint8_t recV[128];
+uint8_t display_index = 0;
 
 //Test output memort
 uint8_t mem[200];
@@ -86,6 +88,7 @@ void setup() {
   // ledcChangeFrequency(PWM_Channel,100,PWM_Bits);
   ledcWrite(PWM_Channel,0);
 
+  u8g2.firstPage();
 }
 
 void InterruptA(){
@@ -263,30 +266,47 @@ void loop() {
       currentSpeed = (float)(EncoderTotal-tenLastEncoder)/(float)(tenMsCounter)/99.0f*PI/180.0f *1000.0f;//rad/s
       tenMsCounter -= 10;
       tenLastEncoder = EncoderTotal;
+      // Serial.printf("%d\n",profileType);
 
       if(currentMillis > 2000){
-        time_f = ((float)((currentMillis-2000)%30000)/1000.0f);
-        if(time_f <15){
+        time_f = ((float)((currentMillis-2000)%40000)/1000.0f);
+        if(time_f <20){
           if(profileType){
             profileType = 0;
             recordAngle = currentAngle;
             record_time = 0;
             record_index = 0;
+            
+            // Serial.printf("Set%f\n",currentAngle);
           }
+          new_graph = 0;
           expSpeed = GetTrapSpeed(time_f);
           expAngle = GetTrapAngle(time_f)+recordAngle;
           expDuty = StateFeedback(expSpeed,expAngle);
           // Serial.printf("%d\n",expDuty);
-          if(time_f > 10 && record_index>0){
-            // u8g2.firstPage();
-            // do{
-            //   u8g2.drawPixel(record_index, recV[record_index--]);
-            // } while (u8g2.nextPage() && record_index--);
-            
+          if(time_f > 10){
+            if(time_f >= 12 && time_f < 15)new_graph = 1;
+            else new_graph = 0;
+            // if(record_index){
+            //   if(new_graph){
+            //     new_graph = 0;
+            //     if(!u8g2.nextPage()){
+            //       u8g2.firstPage();
+            //       new_graph = 1;
+            //     };
+            //   }
+            //   else{
+            //     u8g2.drawPixel(record_index, 50);
+            //     u8g2.drawPixel(record_index, 50);
+            //     // u8g2.drawPixel(record_index, recV[record_index]);
+            //     Serial.printf("%d,%d\n",record_index,recV[record_index]);
+            //     record_index = (record_index+99)%100;
+            //   }
+            // // }
           } else{
               if(time_f-record_time>0.1f){
                 record_time = time_f;
-                recV[record_index++] = (int)(currentSpeed/0.6f);
+                recV[record_index++] = (int)(currentSpeed*64);
               }
           }
         } else {
@@ -295,19 +315,36 @@ void loop() {
             recordAngle = currentAngle;
             record_time = 0;
             record_index = 0;
+            
+            // Serial.printf("Set%f\n",currentAngle);
           }
-          expSpeed = GetSSpeed(time_f-15.0f);
-          expAngle = GetSAngle(time_f-15.0f)+recordAngle;
+          new_graph = 0;
+          expSpeed = GetSSpeed(time_f-20.0f);
+          expAngle = GetSAngle(time_f-20.0f)+recordAngle;
           expDuty = StateFeedback(expSpeed,expAngle);
-          if(time_f > 25){
-            // u8g2.firstPage();
-            // do{
-            //   u8g2.drawPixel(record_index, recV[record_index--]);
-            // } while (u8g2.nextPage() && record_index--);
+          if(time_f > 30){
+            if(time_f >= 32 && time_f < 35)new_graph = 1;
+            else new_graph = 0;
+            // if(record_index){
+              // if(new_graph){
+              //   new_graph = 0;
+              //   if(!u8g2.nextPage()){
+              //     u8g2.firstPage();
+              //     new_graph = 1;
+              //   };
+              // }
+              // else{
+              //   u8g2.drawPixel(record_index, 50);
+              //   u8g2.drawPixel(record_index, 50);
+              //   // u8g2.drawPixel(record_index, recV[record_index]);
+              //   Serial.printf("%d,%d\n",record_index,recV[record_index]);
+              //   record_index = (record_index+99)%100;
+              // }
+            // }
           } else{
               if(time_f-record_time>0.1f){
                 record_time = time_f;
-                recV[record_index++] = (int)(currentSpeed/0.6f);
+                recV[record_index++] = (int)(currentSpeed*64);
               }
           }
         }
@@ -320,8 +357,9 @@ void loop() {
           ledcWrite(PWM_Channel,-expDuty);
         }
       }
+    
 
-      Serial.printf("/*%f,%f,%f,%f,%f,%f,%f*/\n",currentSpeed,expSpeed,currentAngle,expAngle,expAcc,(float)expDuty,((float)currentMillis/1000.0f));
+      Serial.printf("/*%f,%f,%f,%f,%f,%f,%f*/\n",currentSpeed,expSpeed,currentAngle,expAngle,expAcc,(float)expDuty,time_f);
 
     //   if(u8g2.nextPage()){
     //   // u8g2.drawBox(64-20, 32-10, 40, 20);
@@ -342,6 +380,20 @@ void loop() {
   if(msCounter>=1000){
     msCounter = msCounter - 1000;
     ///don't change above
+  if(new_graph){
+    u8g2.firstPage();
+    do {
+      for(int i = 0;i<100;i++){
+        u8g2.drawPixel(i, 63-recV[i]);
+      }
+      
+      // Serial.printf("%d,%d\n",record_index,recV[record_index]);
+      // record_index = (record_index+99)%100;
+    } while ( u8g2.nextPage() );
+  }
+    
+
+    
     // Serial.printf("%d \n",currentMillis);//print time
     // SetClockwise();
     // if(currentSpeed <= 0)SetClockwise();
@@ -352,20 +404,19 @@ void loop() {
     // Serial.printf("%d \n",freq);
     // ledcChangeFrequency(0,freq,8);
 
-  /*
-    char m_str[3];
-    strcpy(m_str, u8x8_u8toa(m, 2));    
-    u8g2.firstPage();
-    do {
-      u8g2.setFont(u8g2_font_logisoso62_tn);
-      u8g2.drawStr(0,63,"9");
-      u8g2.drawStr(33,63,":");
-       u8g2.drawStr(50,63,m_str);
-    } while ( u8g2.nextPage() );
-    m++;
-    if ( m == 60 )m = 0;
-    */
-
+  
+    // char m_str[3];
+    // strcpy(m_str, u8x8_u8toa(m, 2));    
+    // u8g2.firstPage();
+    // do {
+    //   u8g2.setFont(u8g2_font_logisoso62_tn);
+    //   u8g2.drawStr(0,63,"9");
+    //   u8g2.drawStr(33,63,":");
+    //    u8g2.drawStr(50,63,m_str);
+    // } while ( u8g2.nextPage() );
+    // m++;
+    // if ( m == 60 )m = 0;
+  
     // u8g2.clearBuffer();					// clear the internal memory
     // u8g2.setFont(u8g2_font_ncenB08_tr);	// choose a suitable font
     // u8g2.drawStr(0,10,"Hello World!");	// write something to the internal memory
